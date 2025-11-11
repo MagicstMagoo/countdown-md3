@@ -1,0 +1,311 @@
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>A Material Design 3 style countdown</title>
+
+  <!-- 添加 favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%236750A4%22><path d=%22M12 15c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-1-11c0-.55.45-1 1-1s1 .45 1 1v1h6c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h6V2zm7 3H6v2h12V5zm-6 4c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-3 6h6v-2H9v2z%22/></svg>" type="image/svg+xml">
+
+  <!-- Google Fonts & Material Symbols -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=calendar_month" />
+  
+  <!-- CSS & JS-->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="container" role="application" aria-label="倒数日应用">
+    <!-- 左：主体 -->
+    <section class="main-surface" aria-label="倒数主体">
+      <div class="main-header">
+        <div>
+          <div class="title-small">目标</div>
+          <div class="title-large" id="dateDisplay">2025 年 11 月 12 日</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="layoutToggle" class="apply-btn" title="切换布局" aria-pressed="false"><span class="material-symbols-rounded" id="layoutIcon">aspect_ratio</span><span id="layoutText" style="margin-left:4px">紧凑</span></button>
+        </div>
+      </div>
+
+      <div class="countdown-card" id="countdown">
+        <div class="event-title" id="eventTitle">距离 2025.11.12 还有</div>
+        <div class="remaining" id="remaining">-- 天 --:--:--</div>
+        <div class="units" id="units">天 时:分:秒</div>
+      </div>
+
+      <footer>A Material Design 3 style countdown application</footer>
+    </section>
+
+    <!-- 右：设置区 -->
+    <aside class="setup-surface" aria-label="自定义设置">
+      <div class="md3-field">
+        <label for="userDate">自定义日期</label>
+        <input id="userDate" type="date" value="2025-11-12">
+      </div>
+
+      <div class="md3-field">
+        <label for="customText">自定义标题（留空使用日期）</label>
+        <input id="customText" type="text" placeholder="例如：考试日、项目截止日">
+      </div>
+
+      <div class="md3-field">
+        <label>选择图片以提取主题色（将应用到全局）</label>
+        <div class="row">
+          <label class="file-label">
+            <input id="imageInput" type="file" accept="image/*" />
+            <span class="material-symbols-rounded">image</span>
+            <span>选择图片</span>
+          </label>
+          <img id="thumb" class="thumb" alt="缩略预览" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:6px">
+        <button id="applyColor" class="apply-btn"><span class="material-symbols-rounded">palette</span><span>应用取色</span></button>
+        <button id="reset" class="reset-btn"><span class="material-symbols-rounded">refresh</span><span>重置配色</span></button>
+      </div>
+
+      <div style="margin-top:8px;font-size:13px;color:var(--md-sys-color-on-surface);opacity:0.9">TPS: 取色后会更新主色,主题会自动适配</div>
+    </aside>
+  </div>
+
+  <canvas id="probe" style="display:none"></canvas>
+
+  <script>
+    // ---- state ----
+    let targetDate = new Date('2025-11-12T00:00:00');
+    const userDateInput = document.getElementById('userDate');
+    const customTextInput = document.getElementById('customText');
+    const dateDisplay = document.getElementById('dateDisplay');
+    const eventTitleEl = document.getElementById('eventTitle');
+    const remainingEl = document.getElementById('remaining');
+    const unitsEl = document.getElementById('units');
+    const countdownCard = document.getElementById('countdown');
+    const probe = document.getElementById('probe');
+    const thumb = document.getElementById('thumb');
+    const imageInput = document.getElementById('imageInput');
+    const applyColorBtn = document.getElementById('applyColor');
+    const resetBtn = document.getElementById('reset');
+    const layoutToggle = document.getElementById('layoutToggle');
+    const layoutIcon = document.getElementById('layoutIcon');
+    const layoutText = document.getElementById('layoutText');
+
+    // format date display
+    function formatDateLabel(d){
+      return d.toLocaleDateString('zh-CN',{year:'numeric',month:'long',day:'numeric'});
+    }
+    dateDisplay.textContent = formatDateLabel(targetDate);
+
+    // countdown
+    function pad(n){return String(n).padStart(2,'0')}
+    function updateCountdown(){
+      const now = new Date();
+      let diff = targetDate - now;
+      if(diff <= 0){
+        eventTitleEl.textContent = '目标已到！';
+        remainingEl.textContent = '🎉 已到达 🎉';
+        unitsEl.textContent = '';
+        return;
+      }
+      const days = Math.floor(diff / (24*3600*1000));
+      diff %= 24*3600*1000;
+      const hours = Math.floor(diff / (3600*1000));
+      diff %= 3600*1000;
+      const minutes = Math.floor(diff / (60*1000));
+      diff %= 60*1000;
+      const seconds = Math.floor(diff / 1000);
+      remainingEl.textContent = `${days} 天 ${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+    }
+    updateCountdown();
+    setInterval(updateCountdown,1000);
+
+    // update title when user changes date or custom text
+    userDateInput.addEventListener('change',()=>{
+      if(!userDateInput.value) return;
+      targetDate = new Date(userDateInput.value + 'T00:00:00');
+      dateDisplay.textContent = formatDateLabel(targetDate);
+      updateTitle();
+    });
+
+    customTextInput.addEventListener('input', updateTitle);
+    function updateTitle(){
+      const txt = customTextInput.value.trim();
+      if(txt) eventTitleEl.textContent = `距离 ${txt} 还有`;
+      else eventTitleEl.textContent = `距离 ${dateDisplay.textContent} 还有`;
+    }
+
+    // layout toggle (changes alignment within countdown card but won't cause overflow)
+    let compact = false;
+    layoutToggle.addEventListener('click', ()=>{
+      compact = !compact;
+      layoutToggle.setAttribute('aria-pressed', String(compact));
+      if(compact){
+        countdownCard.style.justifyContent = 'center';
+        countdownCard.style.alignItems = 'center';
+        layoutIcon.textContent = 'vertical_align_center';
+        layoutText.textContent = '居中';
+      } else {
+        countdownCard.style.justifyContent = 'center';
+        countdownCard.style.alignItems = 'center';
+        layoutIcon.textContent = 'aspect_ratio';
+        layoutText.textContent = '紧凑';
+      }
+    });
+
+    // ---- color utilities ----
+    function luminance(r,g,b){ return (0.2126*r+0.7152*g+0.0722*b)/255; }
+    function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
+
+    // apply dynamic md3-like palette to CSS variables (affects whole page)
+    function applyPaletteFromRGB(r,g,b){
+      // primary & on-primary
+      const primary = `rgb(${r}, ${g}, ${b})`;
+      const lum = luminance(r,g,b);
+      const onPrimary = lum > 0.6 ? '#000000' : '#ffffff';
+
+      // surface: generate a background color slightly desaturated and lighter/darker based on system theme
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      // compute simple surface as tint of primary
+      const surfaceR = Math.round(clamp(r + (prefersDark ? -40 : 200), 0, 255));
+      const surfaceG = Math.round(clamp(g + (prefersDark ? -40 : 200), 0, 255));
+      const surfaceB = Math.round(clamp(b + (prefersDark ? -40 : 200), 0, 255));
+      const surface = `rgb(${surfaceR}, ${surfaceG}, ${surfaceB})`;
+      const onSurface = prefersDark ? '#E6E1E5' : '#1C1B1F';
+
+      // surface-variant as soft tint
+      const sv = `rgba(${r}, ${g}, ${b}, 0.08)`;
+
+      // app background gradient
+      const bg = prefersDark
+        ? `linear-gradient(180deg, rgba(${surfaceR},${surfaceG},${surfaceB},0.06), rgba(0,0,0,0.06))`
+        : `linear-gradient(180deg, ${surface}, rgba(255,255,255,0.98))`;
+
+      document.documentElement.style.setProperty('--md-sys-color-primary', primary);
+      document.documentElement.style.setProperty('--md-sys-color-on-primary', onPrimary);
+      document.documentElement.style.setProperty('--md-sys-color-surface', surface);
+      document.documentElement.style.setProperty('--md-sys-color-on-surface', onSurface);
+      document.documentElement.style.setProperty('--md-sys-color-surface-variant', sv);
+      document.documentElement.style.setProperty('--app-bg', bg);
+
+      // apply to interactive elements immediately
+      countdownCard.style.background = primary;
+      countdownCard.style.color = onPrimary;
+      layoutToggle.style.background = primary;
+      layoutToggle.style.color = onPrimary;
+      document.querySelectorAll('.apply-btn').forEach(b=>{ b.style.background = primary; b.style.color = onPrimary; });
+      document.querySelectorAll('.reset-btn').forEach(b=>{ b.style.borderColor = 'rgba(0,0,0,0.8)'; });
+      document.querySelectorAll('.file-label').forEach(l=>{ l.style.borderColor = 'rgba(0,0,0,0.8)'; });
+    }
+
+    // ---- image sampling ----
+    let lastSampled = null;
+    imageInput.addEventListener('change', e=>{
+      const f = e.target.files && e.target.files[0];
+      if(!f) return; const url = URL.createObjectURL(f);
+      thumb.src = url; thumb.style.display = 'block';
+      const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = ()=>{
+        // center-crop to square, scale to 200x200 for sampling
+        const size = 200; probe.width = size; probe.height = size; const ctx = probe.getContext('2d');
+        // compute cropping
+        let sx=0, sy=0, sw=img.width, sh=img.height; const ar = img.width/img.height; if(ar>1){ sw = img.height; sx = (img.width - img.height)/2; } else { sh = img.width; sy = (img.height - img.width)/2; }
+        ctx.clearRect(0,0,size,size); ctx.drawImage(img, sx, sy, sw, sh, 0,0,size,size);
+        const data = ctx.getImageData(0,0,size,size).data;
+        let r=0,g=0,b=0,count=0; const step = 4*6; for(let i=0;i<data.length;i+=step){ r+=data[i]; g+=data[i+1]; b+=data[i+2]; count++; }
+        r = Math.round(r/count); g = Math.round(g/count); b = Math.round(b/count);
+        lastSampled = [r,g,b];
+        // do not auto-apply; wait for user click applyColor to confirm
+        URL.revokeObjectURL(url);
+      }; img.onerror = ()=>{ alert('无法读取图片，请选择其他图片'); URL.revokeObjectURL(url); };
+      img.src = url;
+    });
+
+    applyColorBtn.addEventListener('click', ()=>{
+      if(!lastSampled){ alert('请先选择图片以提取颜色'); return; }
+      applyPaletteFromRGB(...lastSampled);
+    });
+
+    function applyPaletteFromRGB(r,g,b){ applyPaletteFromRGB = null; /* prevent accidental overwrite */ }
+    // provide real function name used earlier
+    function applyPaletteFromRGB_real(r,g,b){ applyPaletteFromRGB_real = null; }
+    // Instead, call applyPaletteFromRGB using defined applyPaletteFromRGB implementation below
+
+    // implement final apply
+    function applyPaletteFromRGB_impl(r,g,b){ applyPaletteFromRGB_impl = null; }
+
+    // we already have applyPaletteFromRGB logic earlier: create single implementation now
+    function applyPaletteFromRGB_final(r,g,b){
+      applyPaletteFromRGB_final = applyPaletteFromRGB_final; // noop
+    }
+
+    // Replace above placeholders with working function for clarity
+    function applyPaletteFromRGB_run(r,g,b){
+      // choose smarter palette mapping and apply to document
+      const primary = `rgb(${r}, ${g}, ${b})`;
+      const lum = luminance(r,g,b);
+      const onPrimary = lum > 0.6 ? '#000' : '#fff';
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const surfaceR = Math.round(clamp(r + (prefersDark ? -40 : 200), 0, 255));
+      const surfaceG = Math.round(clamp(g + (prefersDark ? -40 : 200), 0, 255));
+      const surfaceB = Math.round(clamp(b + (prefersDark ? -40 : 200), 0, 255));
+      const surface = `rgb(${surfaceR}, ${surfaceG}, ${surfaceB})`;
+      const onSurface = prefersDark ? '#E6E1E5' : '#1C1B1F';
+      const sv = `rgba(${r}, ${g}, ${b}, 0.08)`;
+      const bg = prefersDark
+        ? `linear-gradient(180deg, rgba(${surfaceR},${surfaceG},${surfaceB},0.06), rgba(0,0,0,0.06))`
+        : `linear-gradient(180deg, ${surface}, rgba(255,255,255,0.98))`;
+
+      document.documentElement.style.setProperty('--md-sys-color-primary', primary);
+      document.documentElement.style.setProperty('--md-sys-color-on-primary', onPrimary);
+      document.documentElement.style.setProperty('--md-sys-color-surface', surface);
+      document.documentElement.style.setProperty('--md-sys-color-on-surface', onSurface);
+      document.documentElement.style.setProperty('--md-sys-color-surface-variant', sv);
+      document.documentElement.style.setProperty('--app-bg', bg);
+
+      // immediate UI updates
+      countdownCard.style.background = primary; countdownCard.style.color = onPrimary;
+      document.querySelectorAll('.apply-btn').forEach(but=>{ but.style.background = primary; but.style.color = onPrimary; });
+      layoutToggle.style.background = primary; layoutToggle.style.color = onPrimary;
+      // subtle surface-variant for setup area
+      document.querySelectorAll('.setup-surface').forEach(s=>{ s.style.background = sv; });
+    }
+
+    // wire apply button to final impl
+    applyColorBtn.addEventListener('click', ()=>{
+      if(!lastSampled){ alert('请先选择图片以提取颜色'); return; }
+      applyPaletteFromRGB_run(...lastSampled);
+    });
+
+    // reset
+    resetBtn.addEventListener('click', ()=>{
+      thumb.style.display = 'none'; thumb.src = '';
+      lastSampled = null;
+      // remove overrides
+      document.documentElement.style.removeProperty('--md-sys-color-primary');
+      document.documentElement.style.removeProperty('--md-sys-color-on-primary');
+      document.documentElement.style.removeProperty('--md-sys-color-surface');
+      document.documentElement.style.removeProperty('--md-sys-color-on-surface');
+      document.documentElement.style.removeProperty('--md-sys-color-surface-variant');
+      document.documentElement.style.removeProperty('--app-bg');
+      // clear inline styles
+      countdownCard.style.background = ''; countdownCard.style.color = '';
+      document.querySelectorAll('.apply-btn').forEach(b=>{ b.style.background=''; b.style.color=''; });
+      layoutToggle.style.background = ''; layoutToggle.style.color = '';
+      document.querySelectorAll('.setup-surface').forEach(s=>{ s.style.background = ''; });
+    });
+
+    // expose correct function name used earlier
+    function applyPaletteFromRGB(...args){ applyPaletteFromRGB_run(...args); }
+
+    // utilities used above
+    function luminance(r,g,b){ return (0.2126*r+0.7152*g+0.0722*b)/255; }
+    function clamp(v,min,max){ return Math.max(min, Math.min(max, v)); }
+
+    // ensure initial title reflects date
+    updateTitle();
+  </script>
+</body>
+</html>
